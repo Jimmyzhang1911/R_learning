@@ -1,3 +1,4 @@
+drug_treat_counts <- read.delim("~/R_home/try/drug_treat_counts.txt", stringsAsFactors=FALSE)
 a<-drug_treat_counts
 rownames(a)<-a[,1]
 a<-a[,-1]
