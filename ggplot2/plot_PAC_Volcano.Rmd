@@ -1,0 +1,96 @@
+---
+title: "plot_PAC_Volcano"
+author: "Jimmy"
+date: "2020/6/16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(PCAtools)
+library(tidyverse)
+library(tibble)
+library(cowplot)
+library(ggrepel)
+library(readxl)
+```
+
+## PCA分析
+```{r warning=FALSE}
+gene_exp <- read.table(file = 'mydata/gene_exp.txt', 
+                       sep = '\t', header = T, row.names = 1)
+
+sample_info <- read.table(file = 'mydata/sample_info.txt', 
+                          sep = '\t', header = T, row.names = 1)
+pca <- pca(gene_exp, metadata = sample_info)
+biplot(pca, x = 'PC1', y = 'PC2')
+screeplot(pca) # 每个主成分的解释度
+```
+
+## 自定义PCA图
+```{r}
+pca_rlt <- rownames_to_column(pca$rotated, var = "sample_name")
+pca_sample <- rownames_to_column(sample_info, var = "sample_name")
+pac_plot_data <- full_join(pca_rlt, pca_sample, by = 'sample_name')
+
+p1 <- ggplot(data = pac_plot_data, aes(x = PC1, y = PC2)) +
+  geom_point(size = 5,
+             aes(shape = strain, fill = stage)) +
+  stat_ellipse(aes(color = stage)) +
+  scale_shape_manual(values = range(c(22, 24))) +
+  labs(title = "PCA result",
+       x = "PCA1 (68% variance explained)",
+       y = "PCA2 (11% variance explained)") +
+  theme_half_open() +
+  scale_fill_brewer(palette = 'Set3') +
+  theme(legend.position = c(0.77, 0.3),
+        plot.title = element_text(size = 18, hjust = 0.5)) +
+        #legend.background = element_rect(fill = "grey60"),
+        #legend.dirction = 'horizontal') +
+  guides(fill = guide_legend(override.aes = list(shape = 21)))
+p1
+```
+## volcano绘图
+```{r message=FALSE, warning=FALSE}
+de_result <- read_excel("mydata/de_result.xlsx", 
+                        col_types = c("numeric", "text", "text", 
+                                      "text", "text", "numeric", "numeric", 
+                                      "numeric", "numeric", "text", "text", 
+                                      "text", "text", "text", "text", "text", 
+                                      "text", "text"))
+res <- select(de_result, "Rank", "GENE_NAME", "log2FoldChange", "pvalue") %>% 
+  mutate(direction = if_else(pvalue > 0.05 | abs(log2FoldChange) < 1, 'NC',
+                             if_else(log2FoldChange > 1, 'up', 'down')))
+# res2 <- slice(res, 1:10) 切片取前十
+filter_genes <- c('FMP27', 'ERG251', 'C5_04050W',
+                    'C7_02530C', 'NOT5', 'C6_03800C',
+                    'PMC1', 'FEN1', 'ERG3', 'FEN12',
+                    'ERG25', 'ERG6', 'MVB12', 'FGR32',
+                    'ERG28', 'ERG27')
+res2 <- filter(res, GENE_NAME %in% filter_genes)
+
+p2 <- ggplot(data = res, aes(x = log2FoldChange, y = -log10(pvalue))) +
+  geom_point(size = 2.5, 
+             aes(color = direction), 
+             show.legend = F) +
+  geom_point(data = res2, size = 2.5,
+             shape = 21, stroke = 1) +
+  scale_color_manual(values = c("#00008B", "#708090", "#8B0000")) +
+  geom_text_repel(data = res2, 
+                  aes(label = GENE_NAME)) +
+  geom_hline(yintercept = -log10(0.05), 
+             linetype = 'dotdash', size = 1) +
+  geom_vline(xintercept = c(1, -1), 
+             linetype = 'dotdash', color = 'grey30') +
+  ylim(c(0, 55)) +
+  labs(title = "DE analysis") +
+  theme_half_open() +
+  theme(plot.title = element_text(hjust = 0.5, size = 18))
+p2  
+
+cowplot::plot_grid(p1, p2)
+```
+
